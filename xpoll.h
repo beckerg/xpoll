@@ -64,15 +64,15 @@
 #endif
 
 struct xpoll {
-#if !defined(XPOLL_KQUEUE)
-    struct pollfd *pollfdv;
-#endif
-
-#if !defined(XPOLL_KQUEUE) && !defined(XPOLL_EPOLL)
+#if defined(XPOLL_KQUEUE)
+    struct xpollev changev[8];      // kevent(2) changelist parameter
+    int changec;                    // kevent(2) nchanges parameter
+#else
+    struct pollfd *fds;             // poll(2) fds parameter
     void **datav;
 #endif
 
-    struct xpollev *xpollevv;
+    struct xpollev *eventv;
     int fdmax;
     int nfds;
     int nrdy;

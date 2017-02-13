@@ -71,9 +71,12 @@
 
 #include "xpoll.h"
 
-#define FDMAX  (1024 * 256)
+#ifndef NELEM
+#define NELEM(_array)   (sizeof(_array) / sizeof((_array)[0]))
+#endif
 
-
+/*
+ */
 struct xpoll *
 xpoll_create(int fdmax)
 {
@@ -89,29 +92,23 @@ xpoll_create(int fdmax)
     xpoll->fdmax = fdmax + 128;
 
 #if !defined(XPOLL_KQUEUE)
-    xpoll->pollfdv = calloc(xpoll->fdmax, sizeof(*xpoll->pollfdv));
-    if (!xpoll->pollfdv) {
+    xpoll->fds = calloc(xpoll->fdmax, sizeof(*xpoll->fds));
+    if (!xpoll->fds) {
         free(xpoll);
         return NULL;
     }
 
     for (int i = 0; i < xpoll->fdmax; ++i)
-        xpoll->pollfdv[i].fd = -1;
+        xpoll->fds[i].fd = -1;
 #endif
 
 #if defined(XPOLL_EPOLL) || defined(XPOLL_KQUEUE)
-    xpoll->nfds = 8;
-    xpoll->xpollevv = calloc(xpoll->nfds, sizeof(*xpoll->xpollevv));
-    if (!xpoll->xpollevv) {
+    xpoll->nfds = 128;
+    xpoll->eventv = calloc(xpoll->nfds, sizeof(*xpoll->eventv));
+    if (!xpoll->eventv) {
         xpoll_destroy(xpoll);
         return NULL;
     }
-
-#if defined(XPOLL_EPOLL)
-    xpoll->fd = epoll_create1(0);
-#elif defined(XPOLL_KQUEUE)
-    xpoll->fd = kqueue();
-#endif
 
 #else
     xpoll->datav = calloc(xpoll->fdmax, sizeof(*xpoll->datav));
@@ -120,7 +117,14 @@ xpoll_create(int fdmax)
         return NULL;
     }
 
-    xpoll->xpollevv = xpoll->pollfdv;
+    xpoll->eventv = xpoll->fds;
+#endif
+
+#if defined(XPOLL_EPOLL)
+    xpoll->fd = epoll_create1(0);
+#elif defined(XPOLL_KQUEUE)
+    xpoll->fd = kqueue();
+#else
     xpoll->fd = getdtablesize();
 #endif
 
@@ -139,64 +143,75 @@ xpoll_destroy(struct xpoll *xpoll)
         close(xpoll->fd);
 
 #if !defined(XPOLL_KQUEUE)
-        free(xpoll->pollfdv);
+        free(xpoll->fds);
+        free(xpoll->datav);
 #endif
 
 #if defined(XPOLL_EPOLL) || defined(XPOLL_KQUEUE)
-        free(xpoll->xpollevv);
-#else
-        free(xpoll->datav);
+        free(xpoll->eventv);
 #endif
     }
 }
 
+/*
+ */
 int
-xpoll_ctl(struct xpoll *xpoll, int op, int flags, int fd, void *data)
+xpoll_ctl(struct xpoll *xpoll, int op, int events, int fd, void *data)
 {
-#if defined(XPOLL_EPOLL) || defined(XPOLL_KQUEUE)
-    struct xpollev eventv[2], *event = eventv;
-#endif
-
-    if (fd < 0 || fd >= xpoll->fdmax)
+    if (fd < 0)
         abort();
 
 #if !defined(XPOLL_KQUEUE)
     struct pollfd *pollfd;
 
-    pollfd = xpoll->pollfdv + fd;
+    if (fd >= xpoll->fdmax)
+        abort();
+
+    pollfd = xpoll->fds + fd;
 
     pollfd->fd = (op == XPOLL_DELETE) ? -1 : fd;
 
-    flags &= POLLIN | POLLOUT;
+    events &= POLLIN | POLLOUT;
 
     if (op == XPOLL_ADD || op == XPOLL_ENABLE)
-        pollfd->events |= flags;
+        pollfd->events |= events;
     else if (op == XPOLL_DELETE || op == XPOLL_DISABLE)
-        pollfd->events &= ~flags;
+        pollfd->events &= ~events;
 #endif
 
 #if defined(XPOLL_EPOLL)
-    event->events = pollfd->events;
-    event->data.ptr = data;
+    struct xpollev change;
 
-    return epoll_ctl(xpoll->fd, op & 0xff, fd, eventv);
+    change->events = pollfd->events;
+    change->data.ptr = data;
+
+    return epoll_ctl(xpoll->fd, op & 0xff, fd, change);
 
 #elif defined(XPOLL_KQUEUE)
+    struct xpollev *change = xpoll->changev + xpoll->changec;
+    int rc = 0;
 
-    if (flags & POLLIN) {
-        EV_SET(event, fd, EVFILT_READ, op, 0, 0, data);
-        ++event;
+    if (events & POLLIN) {
+        EV_SET(change, fd, EVFILT_READ, op, 0, 0, data);
+        ++change;
     }
 
-    if (flags & POLLOUT) {
-        EV_SET(event, fd, EVFILT_WRITE, op, 0, 0, data);
-        ++event;
+    if (events & POLLOUT) {
+        EV_SET(change, fd, EVFILT_WRITE, op, 0, 0, data);
+        ++change;
     }
 
-    return kevent(xpoll->fd, eventv, (event - eventv), NULL, 0, NULL);
+    xpoll->changec = change - xpoll->changev;
+
+    if (xpoll->changec >= NELEM(xpoll->changev) - 1) {
+        rc = kevent(xpoll->fd, xpoll->changev, xpoll->changec, NULL, 0, NULL);
+
+        xpoll->changec = 0;
+    }
+
+    return rc;
 
 #else
-
     if (fd >= xpoll->nfds)
         xpoll->nfds = fd + 1;
 
@@ -206,18 +221,18 @@ xpoll_ctl(struct xpoll *xpoll, int op, int flags, int fd, void *data)
 #endif
 }
 
+/*
+ */
 int
 xpoll_wait(struct xpoll *xpoll, int timeout)
 {
     xpoll->n = 0;
 
 #if defined(XPOLL_EPOLL)
-    xpoll->nrdy = epoll_wait(xpoll->fd, xpoll->xpollevv, xpoll->nfds, timeout);
+    xpoll->nrdy = epoll_wait(xpoll->fd, xpoll->eventv, xpoll->nfds, timeout);
 
 #elif defined(XPOLL_KQUEUE)
-
-    struct timespec *ts = NULL;
-    struct timespec tsbuf;
+    struct timespec tsbuf, *ts = NULL;
 
     if (timeout >= 0) {
         tsbuf.tv_sec = timeout / 1000;
@@ -225,20 +240,24 @@ xpoll_wait(struct xpoll *xpoll, int timeout)
         ts = &tsbuf;
     }
 
-    xpoll->nrdy = kevent(xpoll->fd, NULL, 0, xpoll->xpollevv, xpoll->nfds, ts);
+    xpoll->nrdy = kevent(xpoll->fd, xpoll->changev, xpoll->changec,
+                         xpoll->eventv, xpoll->nfds, ts);
+
+    xpoll->changec = 0;
 
 #else
-
-    xpoll->nrdy = poll(xpoll->xpollevv, xpoll->nfds, timeout);
+    xpoll->nrdy = poll(xpoll->eventv, xpoll->nfds, timeout);
 #endif
 
     return xpoll->nrdy;
 }
 
+/*
+ */
 int
 xpoll_revents(struct xpoll *xpoll, void **datap)
 {
-    struct xpollev *xpollev;
+    struct xpollev *event;
 
     *datap = NULL;
 
@@ -246,49 +265,47 @@ xpoll_revents(struct xpoll *xpoll, void **datap)
         return 0;
 
 #if defined(XPOLL_EPOLL)
-    xpollev = xpoll->xpollevv + xpoll->n;
-    *datap = xpollev->data.ptr;
+    event = xpoll->eventv + xpoll->n;
+    *datap = event->data.ptr;
 
     --xpoll->nrdy;
     ++xpoll->n;
 
-    return xpollev->events;
+    return event->events;
 
 #elif defined(XPOLL_KQUEUE)
+    int events = 0;
 
-    int flags = 0;
+    event = xpoll->eventv + xpoll->n;
 
-    xpollev = xpoll->xpollevv + xpoll->n;
+    if (event->filter == EVFILT_READ)
+        events |= POLLIN;
+    else if (event->filter == EVFILT_WRITE)
+        events |= POLLOUT;
 
-    if (xpollev->filter == EVFILT_READ)
-        flags |= POLLIN;
-    else if (xpollev->filter == EVFILT_WRITE)
-        flags |= POLLOUT;
+    if (event->flags & EV_ERROR)
+        events |= POLLERR;
 
-    if (xpollev->flags & EV_ERROR)
-        flags |= POLLERR;
-
-    *datap = xpollev->udata;
+    *datap = event->udata;
 
     --xpoll->nrdy;
     ++xpoll->n;
 
-    return flags;
+    return events;
 
 #else
-
-    xpollev = xpoll->xpollevv;
+    event = xpoll->eventv;
 
     while (xpoll->n < xpoll->nfds) {
-        if (xpollev->revents) {
+        if (event->revents) {
             *datap = xpoll->datav[xpoll->n];
             --xpoll->nrdy;
             ++xpoll->n;
-            return xpollev->revents;
+            return event->revents;
         }
 
         ++xpoll->n;
-        ++xpollev;
+        ++event;
     }
 
     return 0;
