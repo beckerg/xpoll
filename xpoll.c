@@ -182,10 +182,10 @@ xpoll_ctl(struct xpoll *xpoll, int op, int events, int fd, void *data)
 #if defined(XPOLL_EPOLL)
     struct xpollev change;
 
-    change->events = pollfd->events;
-    change->data.ptr = data;
+    change.events = pollfd->events;
+    change.data.ptr = data;
 
-    return epoll_ctl(xpoll->fd, op & 0xff, fd, change);
+    return epoll_ctl(xpoll->fd, op & 0xff, fd, &change);
 
 #elif defined(XPOLL_KQUEUE)
     struct xpollev *change = xpoll->changev + xpoll->changec;
