@@ -82,8 +82,12 @@ xpoll_create(int fdmax)
 {
     struct xpoll *xpoll;
 
-    if (fdmax < 1)
+    errno = 0;
+
+    if (fdmax < 1) {
+        errno = EINVAL;
         return NULL;
+    }
 
     xpoll = calloc(1, sizeof(*xpoll));
     if (!xpoll)
@@ -93,10 +97,8 @@ xpoll_create(int fdmax)
 
 #if !defined(XPOLL_KQUEUE)
     xpoll->fds = calloc(xpoll->fdmax, sizeof(*xpoll->fds));
-    if (!xpoll->fds) {
-        free(xpoll);
-        return NULL;
-    }
+    if (!xpoll->fds)
+        goto errout;
 
     for (int i = 0; i < xpoll->fdmax; ++i)
         xpoll->fds[i].fd = -1;
@@ -105,17 +107,13 @@ xpoll_create(int fdmax)
 #if defined(XPOLL_EPOLL) || defined(XPOLL_KQUEUE)
     xpoll->nfds = 128;
     xpoll->eventv = calloc(xpoll->nfds, sizeof(*xpoll->eventv));
-    if (!xpoll->eventv) {
-        xpoll_destroy(xpoll);
-        return NULL;
-    }
+    if (!xpoll->eventv)
+        goto errout;
 
 #else
     xpoll->datav = calloc(xpoll->fdmax, sizeof(*xpoll->datav));
-    if (!xpoll->datav) {
-        xpoll_destroy(xpoll);
-        return NULL;
-    }
+    if (!xpoll->datav)
+        goto errout;
 
     xpoll->eventv = xpoll->fds;
 #endif
@@ -128,9 +126,13 @@ xpoll_create(int fdmax)
     xpoll->fd = getdtablesize();
 #endif
 
-    if (xpoll->fd < 0) {
+  errout:
+    if (errno) {
+        int xerrno = errno;
+
         xpoll_destroy(xpoll);
-        return NULL;
+        errno = xerrno;
+        xpoll = NULL;
     }
 
     return xpoll;
@@ -158,38 +160,41 @@ xpoll_destroy(struct xpoll *xpoll)
 int
 xpoll_ctl(struct xpoll *xpoll, int op, int events, int fd, void *data)
 {
+    int rc = 0;
+
     if (fd < 0)
         abort();
 
 #if !defined(XPOLL_KQUEUE)
-    struct pollfd *pollfd;
+    struct pollfd *fds;
 
-    if (fd >= xpoll->fdmax)
-        abort();
+    if (fd >= xpoll->fdmax) {
+        errno = EINVAL;
+        return -1;
+    }
 
-    pollfd = xpoll->fds + fd;
+    fds = xpoll->fds + fd;
 
-    pollfd->fd = (op == XPOLL_DELETE) ? -1 : fd;
+    fds->fd = (op == XPOLL_DELETE) ? -1 : fd;
 
     events &= POLLIN | POLLOUT;
 
     if (op == XPOLL_ADD || op == XPOLL_ENABLE)
-        pollfd->events |= events;
+        fds->events |= events;
     else if (op == XPOLL_DELETE || op == XPOLL_DISABLE)
-        pollfd->events &= ~events;
+        fds->events &= ~events;
 #endif
 
 #if defined(XPOLL_EPOLL)
     struct xpollev change;
 
-    change.events = pollfd->events;
+    change.events = fds->events;
     change.data.ptr = data;
 
-    return epoll_ctl(xpoll->fd, op & 0xff, fd, &change);
+    rc = epoll_ctl(xpoll->fd, op & 0xff, fd, &change);
 
 #elif defined(XPOLL_KQUEUE)
     struct xpollev *change = xpoll->changev + xpoll->changec;
-    int rc = 0;
 
     if (events & POLLIN) {
         EV_SET(change, fd, EVFILT_READ, op, 0, 0, data);
@@ -209,16 +214,14 @@ xpoll_ctl(struct xpoll *xpoll, int op, int events, int fd, void *data)
         xpoll->changec = 0;
     }
 
-    return rc;
-
 #else
     if (fd >= xpoll->nfds)
         xpoll->nfds = fd + 1;
 
     xpoll->datav[fd] = data;
-
-    return 0;
 #endif
+
+    return rc;
 }
 
 /*
@@ -308,6 +311,6 @@ xpoll_revents(struct xpoll *xpoll, void **datap)
         ++event;
     }
 
-    return 0;
+    return 0; // Should never get here..
 #endif
 }

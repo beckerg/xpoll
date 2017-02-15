@@ -27,22 +27,6 @@
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-/* The following is a simple test program to illustrate the power and
- * efficiency of epoll(7)/kqueue(2) vs poll(2).  Basically, it creates
- * an array of n pipes and makes all the read-ends of the pipes known
- * to poll/epoll/kqueue such that we can use xpoll to poll for read
- * events on all the pipes.  It then starts things off by writing
- * on byte into the first pipe.
- *
- * At this point we enter a timed loop which calls xpoll() until the
- * timer fires.  When xpoll() returns, the "ready" pipe is read and
- * then the data is written to the next pipe in the array, circling
- * back to the first pipe once the end of the array is reached.
- *
- * Repeating the test with successively larger n shows that poll(2)
- * performs worse as n goes up, while epoll(7)/kqueue(2) produce
- * fairly steady results.
- */
 #include <stdio.h>
 #include <stdlib.h>
 #include <stddef.h>
@@ -79,6 +63,28 @@ sigalrm_isr(int sig)
 
 char rwbuf[PIPE_BUF];
 
+/* The following is a simple test program to demonstrate the power and
+ * efficiency of epoll(7)/kqueue(2) vs poll(2).
+ *
+ * First, it creates an array of n pipes and makes all pipe fds (both
+ * read and write ends) known to xpoll (i.e., it sets POLLIN on each
+ * read-end and disables all write-ends).  We start things off by
+ * writing to the write-end of the first pipe.
+ *
+ * Next, we enter a timed loop which calls xpoll() until the timer fires.
+ * When xpoll() returns, the "ready for read" pipe is read and then the
+ * next pipe in the array is enabled for POLLOUT (circling back to the
+ * first pipe once the end of the array is reached).  When xpoll returns
+ * that the "ready for write" pipe is ready, we disable POLLOUT on that
+ * fd and then write to it.  On the next iteration xpoll() will return
+ * that it is ready to read, and we'll repeat the entire process over
+ * with the next pipe in the array.
+ *
+ * Repeating the test with successively larger number of pipes (n)
+ * shows that poll(2) performs worse as n goes up, while
+ * epoll(7)/kqueue(2) produce consistent results regardless of n
+ * (until n becomes very large).
+ */
 int
 main(int argc, char **argv)
 {
@@ -112,8 +118,16 @@ main(int argc, char **argv)
         rwmax = sizeof(rwbuf);
 
     if (connc == 1) {
+#if defined(XPOLL_KQUEUE)
+        const char *pollname = "KEVENT";
+#elif defined(XPOLL_EPOLL)
+        const char *pollname = "EPOLL";
+#else
+        const char *pollname = "POLL";
+#endif
+
         printf("%6s %6s %9s %8s %12s\n",
-               "NFD", "TIME", "POLL", "READ", "POLL/SEC");
+               "NFD", "SEC", pollname, "READ", "XPOLL/SEC");
     }
 
     connv = malloc(sizeof(*connv) * connc);
