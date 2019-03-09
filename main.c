@@ -264,6 +264,14 @@ main(int argc, char **argv)
            iter, rd_total,
            (iter * 1000000.0) / (tv_diff.tv_sec * 1000000 + tv_diff.tv_usec));
 
+	printf("%12d connections\n", connc);
+	printf("%12.3lf total run time\n",
+           (tv_diff.tv_sec * 1000000.0 + tv_diff.tv_usec) / 1000000);
+	printf("%12ld total iterations\n", iter);
+	printf("%12lu total read operations\n", rd_total);
+	printf("%12.2lf reads/sec\n",
+           (iter * 1000000.0) / (tv_diff.tv_sec * 1000000 + tv_diff.tv_usec));
+
     xpoll_destroy(xpoll);
 
     return 0;
