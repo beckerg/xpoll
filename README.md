@@ -26,12 +26,12 @@ that it is ready to read, and we'll repeat the entire process over
 with the next pipe in the array.
 
 Repeating the test with successively larger number of pipes (n)
-shows that _**poll(2)**_ performs much worse as n goes up, while
+shows that **poll(2)** performs much worse as n goes up, while
 **epoll(7)/kqueue(2)** produce consistent results regardless of n
 (until n becomes very large).
 
 ## FreeBSD
-Build and run the _**kqueue(2)**_ based test (FreeBSD 13.0-RELEASE-p2 amd64):
+Build and run the **kqueue(2)** based test (FreeBSD 13.0-RELEASE-p2 amd64):
 
 ```
 $ gmake
@@ -56,7 +56,7 @@ $ ./xpoll 1000
   1392773.82 reads/sec
 ```
 
-Build and run the _**poll(2)**_ based test:
+Build and run the **poll(2)** based test:
 
 ```
 $ gmake clean poll
@@ -81,13 +81,13 @@ $ ./xpoll 1000
      2051.60 reads/sec
 ```
 
-Comparing the _reads/sec_, we see that for 8 pipes _**kqueue(2)**_
-is roughly 3.7 times faster than _**poll(2)**_ in responding
-events, while for 1000 pipes _**kqueue(2)**_ is over _679_ times
-faster than _**poll(2)**_.
+Comparing the _reads/sec_, we see that for 8 pipes **kqueue(2)**
+is roughly 3.7 times faster than **poll(2)** in responding
+events, while for 1000 pipes **kqueue(2)** is over _679_ times
+faster than **poll(2)**.
 
 ## Linux
-Build and run the _**epoll(2)**_ based test (Fedora 34 5.11.12-300.fc34.x86_64
+Build and run the **epoll(2)** based test (Fedora 34 5.11.12-300.fc34.x86_64
 in a VirtualBox VM on the host used for the FreeBSD test):
 
 ```
@@ -113,7 +113,7 @@ $ ./xpoll 1000
    882090.23 reads/sec
 ```
 
-Build and run the _**poll(2)**) based test:
+Build and run the **poll(2)** based test:
 
 ```
 $ gmake clean poll
@@ -138,10 +138,10 @@ $ ./xpoll 1000
      5797.41 reads/sec
 ```
 
-Comparing the _reads/sec_, we see that for 8 pipes _**epoll(2)**_
-is roughly 1.8 times faster than _**poll(2)**_ in responding
-events, while for 510 pipes _**epoll(2)**_ is roughly 152 times
-faster than _**poll(2)**_.  Note that I would expect much
+Comparing the _reads/sec_, we see that for 8 pipes **epoll(2)**
+is roughly 1.8 times faster than **poll(2)** in responding
+events, while for 510 pipes **epoll(2)** is roughly 152 times
+faster than **poll(2)**.  Note that I would expect much
 better numbers when not run within a VM, so YMMV.  I will
 try to gather some numbers from a real machine when I get
 a chance, and maybe bump up the open fd limits as well...
