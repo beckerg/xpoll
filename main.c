@@ -118,12 +118,12 @@ main(int argc, char **argv)
         rwmax = sizeof(rwbuf);
 
     if (connc == 1) {
-#if defined(XPOLL_KQUEUE)
-        const char *pollname = "KEVENT";
-#elif defined(XPOLL_EPOLL)
-        const char *pollname = "EPOLL";
+#if XPOLL_KQUEUE
+        const char *pollname = "kevent";
+#elif XPOLL_EPOLL
+        const char *pollname = "epool";
 #else
-        const char *pollname = "POLL";
+        const char *pollname = "poll";
 #endif
 
         printf("%6s %6s %9s %8s %12s\n",

@@ -31,7 +31,13 @@
 
 #include <poll.h>
 
-#if defined(XPOLL_KQUEUE)
+#if __FreeBSD__
+#define XPOLL_KQUEUE    (!XPOLL_POLL)
+#elif __linux__
+#define XPOLL_EPOLL     (!XPOLL_POLL)
+#endif
+
+#if XPOLL_KQUEUE
 #include <sys/event.h>
 #include <sys/queue.h>
 
@@ -42,7 +48,7 @@
 #define XPOLL_ENABLE    EV_ENABLE
 #define XPOLL_DISABLE   EV_DISABLE
 
-#elif defined(XPOLL_EPOLL)
+#elif XPOLL_EPOLL
 
 #include <sys/epoll.h>
 
@@ -64,7 +70,7 @@
 #endif
 
 struct xpoll {
-#if defined(XPOLL_KQUEUE)
+#if XPOLL_KQUEUE
     struct xpollev changev[8];      // kevent(2) changelist parameter
     int changec;                    // kevent(2) nchanges parameter
 #else

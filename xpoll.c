@@ -44,18 +44,15 @@
  * and POLLOUT, and the operations are XPOLL_ADD, XPOLL_DELETE, XPOLL_ENABLE,
  * and XPOLL_DISABLE.
  *
- * To poll for events one must call xpoll(3).  xpoll(2) has the same general
+ * To poll for events one must call xpoll().  xpoll() has the same general
  * sematics as poll(2), but may vary depending upon which underlying
- * implementation is in use.  xpoll(3) manages the details of the underlying
+ * implementation is in use.  xpoll() manages the details of the underlying
  * implementation.  In order to retrieve all currently ready events,
  * xpoll_revents(3) should be called until it returns zero.
  *
  * Compile this file with the accompanying main.c to generate a simple test
  * program that illustrates how much more efficent epoll(7)/kqueue(2) are
  * than poll(2).
- *
- * Note that xpoll(3) was created for instructional purposes, and hence it's
- * not clear how or if it will useful it would be in production code.
  */
 #include <stdio.h>
 #include <stdlib.h>
@@ -95,7 +92,7 @@ xpoll_create(int fdmax)
 
     xpoll->fdmax = fdmax + 128;
 
-#if !defined(XPOLL_KQUEUE)
+#if !XPOLL_KQUEUE
     xpoll->fds = calloc(xpoll->fdmax, sizeof(*xpoll->fds));
     if (!xpoll->fds)
         goto errout;
@@ -104,7 +101,7 @@ xpoll_create(int fdmax)
         xpoll->fds[i].fd = -1;
 #endif
 
-#if defined(XPOLL_EPOLL) || defined(XPOLL_KQUEUE)
+#if XPOLL_EPOLL || XPOLL_KQUEUE
     xpoll->nfds = 128;
     xpoll->eventv = calloc(xpoll->nfds, sizeof(*xpoll->eventv));
     if (!xpoll->eventv)
@@ -118,9 +115,9 @@ xpoll_create(int fdmax)
     xpoll->eventv = xpoll->fds;
 #endif
 
-#if defined(XPOLL_EPOLL)
+#if XPOLL_EPOLL
     xpoll->fd = epoll_create1(0);
-#elif defined(XPOLL_KQUEUE)
+#elif XPOLL_KQUEUE
     xpoll->fd = kqueue();
 #else
     xpoll->fd = getdtablesize();
@@ -144,12 +141,12 @@ xpoll_destroy(struct xpoll *xpoll)
     if (xpoll) {
         close(xpoll->fd);
 
-#if !defined(XPOLL_KQUEUE)
+#if !XPOLL_KQUEUE
         free(xpoll->fds);
         free(xpoll->datav);
 #endif
 
-#if defined(XPOLL_EPOLL) || defined(XPOLL_KQUEUE)
+#if XPOLL_EPOLL || XPOLL_KQUEUE
         free(xpoll->eventv);
 #endif
     }
@@ -165,7 +162,7 @@ xpoll_ctl(struct xpoll *xpoll, int op, int events, int fd, void *data)
     if (fd < 0)
         abort();
 
-#if !defined(XPOLL_KQUEUE)
+#if !XPOLL_KQUEUE
     struct pollfd *fds;
 
     if (fd >= xpoll->fdmax) {
@@ -185,7 +182,7 @@ xpoll_ctl(struct xpoll *xpoll, int op, int events, int fd, void *data)
         fds->events &= ~events;
 #endif
 
-#if defined(XPOLL_EPOLL)
+#if XPOLL_EPOLL
     struct xpollev change;
 
     change.events = fds->events;
@@ -193,7 +190,7 @@ xpoll_ctl(struct xpoll *xpoll, int op, int events, int fd, void *data)
 
     rc = epoll_ctl(xpoll->fd, op & 0xff, fd, &change);
 
-#elif defined(XPOLL_KQUEUE)
+#elif XPOLL_KQUEUE
     struct xpollev *change = xpoll->changev + xpoll->changec;
 
     if (events & POLLIN) {
@@ -231,10 +228,10 @@ xpoll_wait(struct xpoll *xpoll, int timeout)
 {
     xpoll->n = 0;
 
-#if defined(XPOLL_EPOLL)
+#if XPOLL_EPOLL
     xpoll->nrdy = epoll_wait(xpoll->fd, xpoll->eventv, xpoll->nfds, timeout);
 
-#elif defined(XPOLL_KQUEUE)
+#elif XPOLL_KQUEUE
     struct timespec tsbuf, *ts = NULL;
 
     if (timeout >= 0) {
@@ -267,7 +264,7 @@ xpoll_revents(struct xpoll *xpoll, void **datap)
     if (xpoll->nrdy < 1)
         return 0;
 
-#if defined(XPOLL_EPOLL)
+#if XPOLL_EPOLL
     event = xpoll->eventv + xpoll->n;
     *datap = event->data.ptr;
 
@@ -276,7 +273,7 @@ xpoll_revents(struct xpoll *xpoll, void **datap)
 
     return event->events;
 
-#elif defined(XPOLL_KQUEUE)
+#elif XPOLL_KQUEUE
     int events = 0;
 
     event = xpoll->eventv + xpoll->n;

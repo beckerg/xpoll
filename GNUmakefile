@@ -7,41 +7,45 @@ PROG := xpoll
 
 HDR := xpoll.h
 SRC := xpoll.c main.c
+OBJ := ${SRC:.c=.o}
 
-PLATFORM    := $(shell uname -s | tr 'a-z' 'A-Z')
-#INCLUDE     := -I. -I../lib -I../../src/include
-INCLUDE     := -I.
-DEBUG       := -DDEBUG -O0
-CPPFLAGS    := -D${PLATFORM}
-CFLAGS      += -Wall -O2 -g3 ${INCLUDE}
+INCLUDE  := -I.
+CFLAGS   += -Wall -O2 -g3 ${INCLUDE}
+CPPFLAGS += -DNDEBUG
 
-OBJ     := ${SRC:.c=.o}
+.DELETE_ON_ERROR:
+.NOT_PARALLEL:
+
+.PHONY: all asan clean clobber debug distclean maintainer-clean
+
 
 all: ${PROG}
 
 clean:
 	rm -f ${PROG} ${OBJ} *.core
+	rm -f $(patsubst %.c,.%.d*,${SRC})
 
-cleandir: clean
+cleandir distclean maintainer-clean: clean
 
-debug: CFLAGS += ${DEBUG}
+debug: CPPFLAGS += -UNDEBUG
+debug: CFLAGS += -O0 -fno-omit-frame-pointer
 debug: ${PROG}
 
-epoll_debug: CFLAGS += ${DEBUG}
-epoll_debug: epoll
+asan: CPPFLAGS += -UNDEBUG
+asan: CFLAGS += -O0 -fno-omit-frame-pointer
+asan: CFLAGS += -fsanitize=address -fsanitize=undefined
+asan: LDLIBS += -fsanitize=address -fsanitize=undefined
+asan: ${PROG}
 
-epoll: CFLAGS += -DXPOLL_EPOLL
-epoll: ${PROG}
-
-kqueue_asan: CFLAGS += ${DEBUG}
-kqueue_asan: CFLAGS += -fsanitize=address -fsanitize=undefined
-kqueue_asan: LDLIBS += -fsanitize=address -fsanitize=undefined
-kqueue_asan: kqueue
-
-kqueue_debug: CFLAGS += ${DEBUG}
-kqueue_debug: kqueue
-
-kqueue: CFLAGS += -DXPOLL_KQUEUE
-kqueue: ${PROG}
+poll: CPPFLAGS += -DXPOLL_POLL=1
+poll: ${PROG}
 
 ${PROG}: ${OBJ}
+
+.%.d: %.c
+	@set -e; rm -f $@; \
+	$(CC) -M $(CPPFLAGS) ${INCLUDE} $< > $@.$$$$; \
+	sed 's,\($*\)\.o[ :]*,\1.o $@ : ,g' < $@.$$$$ > $@; \
+	rm -f $@.$$$$
+
+-include $(patsubst %.c,.%.d,${SRC})
