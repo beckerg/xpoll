@@ -8,15 +8,16 @@ While it's not a drop-in replacement for **poll(2)**, it should prove fairly
 easy to retrofit **poll(2)** based programs to use **xpoll(3)**.
 
 # Build and Test
-_**main.c**_ is a simple test program to demonstrate the power and
-efficiency of **epoll(7)/kqueue(2)** vs **poll(2)**.
+_**test/looptest/main.c**_ is a simple test program to demonstrate the power
+and efficiency of **epoll(7)/kqueue(2)** vs **poll(2)**.
 
 First, it creates an array of n pipes and makes all pipe fds (both
 read and write ends) known to _xpoll_ (i.e., it sets **POLLIN**
 on each read-end and disables all write-ends).  We start things off
 by writing to the write-end of the first pipe.
 
-Next, we enter a timed loop which calls _xpoll()_ until the timer fires.
+Next, we enter a timed loop which repeatedly calls _xpoll()_ until the
+timer fires.
 When _xpoll()_ returns, the "ready for read" pipe is read and then the
 next pipe in the array is enabled for **POLLOUT** (circling back to the
 first pipe once the end of the array is reached).  When _xpoll()_ returns
@@ -35,55 +36,50 @@ Build and run the **kqueue(2)** based test (FreeBSD 13.0-RELEASE-p2 amd64):
 
 ```
 $ gmake
-cc -Wall -O2 -g3 -I. -DNDEBUG  -c -o xpoll.o xpoll.c
-cc -Wall -O2 -g3 -I. -DNDEBUG  -c -o main.o main.c
-cc   xpoll.o main.o   -o xpoll
 
-$ ./xpoll
-     8 10.001  14739959  7369980   1473887.72
-           8 connections
-      10.001 total run time
-    14739959 total iterations
-     7369980 total read operations
-  1473887.72 reads/sec
+$ ./test/looptest/looptest 
+      kqueue  mechanism
+           8  connections
+      10.007  total run time
+    29526281  total iterations
+    14763141  total read operations
+  2950424.72  reads/sec
 
-$ ./xpoll 1000
-  1000 10.001  13928585  6964293   1392773.82
-        1000 connections
-      10.001 total run time
-    13928585 total iterations
-     6964293 total read operations
-  1392773.82 reads/sec
+$ ./test/looptest/looptest 1000
+      kqueue  mechanism
+        1000  connections
+      10.002  total run time
+    28165039  total iterations
+    14082520  total read operations
+  2815974.78  reads/sec
 ```
 
 Build and run the **poll(2)** based test:
 
 ```
-$ gmake clean poll
-cc -Wall -O2 -g3 -I. -DNDEBUG -DXPOLL_POLL=1  -c -o xpoll.o xpoll.c
-cc -Wall -O2 -g3 -I. -DNDEBUG -DXPOLL_POLL=1  -c -o main.o main.c
-cc   xpoll.o main.o   -o xpoll
+$ gmake clean
+$ gmake poll
 
-$ ./xpoll
-     8 10.005   3920108  1960054    391819.20
-           8 connections
-      10.005 total run time
-     3920108 total iterations
-     1960054 total read operations
-   391819.20 reads/sec
+$ ./test/looptest/looptest
+        poll  mechanism
+           8  connections
+      10.000  total run time
+     5729571  total iterations
+     2864786  total read operations
+   572939.51  reads/sec
 
-$ ./xpoll 1000
-  1000 10.001     20518    10259      2051.60
-        1000 connections
-      10.001 total run time
-       20518 total iterations
-       10259 total read operations
-     2051.60 reads/sec
+$ ./test/looptest/looptest 1000
+        poll  mechanism
+        1000  connections
+      10.011  total run time
+       44203  total iterations
+       22102  total read operations
+     4415.42  reads/sec
 ```
 
 Comparing the _reads/sec_, we see that for 8 pipes **kqueue(2)**
-is roughly 3.7 times faster than **poll(2)** in responding
-events, while for 1000 pipes **kqueue(2)** is over _679_ times
+is roughly 5 times faster than **poll(2)** in responding
+events, while for 1000 pipes **kqueue(2)** is over _638_ times
 faster than **poll(2)**.
 
 ## Linux
@@ -92,9 +88,6 @@ in a VirtualBox VM on the host used for the FreeBSD test):
 
 ```
 $ gmake
-cc -Wall -O2 -g3 -I. -DNDEBUG  -c -o xpoll.o xpoll.c
-cc -Wall -O2 -g3 -I. -DNDEBUG  -c -o main.o main.c
-cc   xpoll.o main.o   -o xpoll
 
 $ ./xpoll
      8 10.001  10265379  5132690   1026485.04
@@ -116,10 +109,8 @@ $ ./xpoll 1000
 Build and run the **poll(2)** based test:
 
 ```
-$ gmake clean poll
-cc -Wall -O2 -g3 -I. -DNDEBUG -DXPOLL_POLL=1  -c -o xpoll.o xpoll.c
-cc -Wall -O2 -g3 -I. -DNDEBUG -DXPOLL_POLL=1  -c -o main.o main.c
-cc   xpoll.o main.o   -o xpoll
+$ gmake clean
+$ gmake poll
 
 $ ./xpoll
      8 10.001   5773675  2886838    577317.68
