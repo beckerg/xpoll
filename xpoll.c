@@ -72,6 +72,8 @@
 #endif
 
 /*
+ * Create an xpoll instance and event queue to be used to manage
+ * a set of file descriptors.
  */
 struct xpoll *
 xpoll_create(int fdmax)
@@ -119,7 +121,7 @@ xpoll_create(int fdmax)
 #elif XPOLL_KQUEUE
     xpoll->fd = kqueue();
 #else
-    xpoll->fd = getdtablesize();
+    xpoll->fd = -1;
 #endif
 
   errout:
@@ -152,6 +154,9 @@ xpoll_destroy(struct xpoll *xpoll)
 }
 
 /*
+ * Similar to epoll_ctl() and kevent(), allows caller to add or delete
+ * file descriptors to the xpoll event queue, and to enable or disable
+ * reception of POLLIN and/or POLLOUT events on those descriptors.
  */
 int
 xpoll_ctl(struct xpoll *xpoll, int op, int events, int fd, void *data)
@@ -221,6 +226,9 @@ xpoll_ctl(struct xpoll *xpoll, int op, int events, int fd, void *data)
 }
 
 /*
+ * Similar to epoll_wait() and poll(), returns the number of file
+ * descriptors in the xpoll object that are ready for reading or
+ * writing.
  */
 int
 xpoll_wait(struct xpoll *xpoll, int timeout)
@@ -252,6 +260,11 @@ xpoll_wait(struct xpoll *xpoll, int timeout)
 }
 
 /*
+ * xpoll_revents() should be called in a loop after xpoll_wait()
+ * returns that one or more descriptors have pending events.
+ * On each successive call, xpoll_revents() will return the
+ * pending eventmask and the user data for each descriptor
+ * (as associated by xpoll_ctl()) that has a pending event.
  */
 int
 xpoll_revents(struct xpoll *xpoll, void **datap)

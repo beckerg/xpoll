@@ -64,7 +64,8 @@ sigalrm_isr(int sig)
 
 char rwbuf[PIPE_BUF];
 
-/* The following is a simple test program to demonstrate the power and
+/*
+ * The following is a simple test program to demonstrate the power and
  * efficiency of epoll(7)/kqueue(2) vs poll(2).
  *
  * First, it creates an array of n pipes and makes all pipe fds (both
@@ -72,17 +73,17 @@ char rwbuf[PIPE_BUF];
  * read-end and disables all write-ends).  We start things off by
  * writing to the write-end of the first pipe.
  *
- * Next, we enter a timed loop which calls xpoll() until the timer fires.
- * When xpoll() returns, the "ready for read" pipe is read and then the
- * next pipe in the array is enabled for POLLOUT (circling back to the
- * first pipe once the end of the array is reached).  When xpoll returns
- * that the "ready for write" pipe is ready, we disable POLLOUT on that
- * fd and then write to it.  On the next iteration xpoll() will return
- * that it is ready to read, and we'll repeat the entire process over
- * with the next pipe in the array.
+ * Next, we enter a timed loop which calls xpoll_wait() until the timer
+ * fires.  When xpoll_wait() returns, the "ready for read" pipe is read
+ * and then the next pipe in the array is enabled for POLLOUT (circling
+ * back to the first pipe once the end of the array is reached).
+ * When xpoll_revent() returns that the "ready for write" pipe is ready,
+ * we disable POLLOUT on that fd and then write to it.  On the next
+ * iteration xpoll() will return that it is ready to read, and we'll
+ * repeat the entire process over with the next pipe in the array.
  *
  * Repeating the test with successively larger number of pipes (n)
- * shows that poll(2) performs worse as n goes up, while
+ * shows that poll(2) performs increasingly worse as n goes up, while
  * epoll(7)/kqueue(2) produce consistent results regardless of n
  * (until n becomes very large).
  */
@@ -259,18 +260,19 @@ main(int argc, char **argv)
     gettimeofday(&tv_stop, NULL);
     timersub(&tv_stop, &tv_start, &tv_diff);
 
-    printf("%6d %6.3lf %9ld %8lu %12.2lf\n",
-           connc,
-           (tv_diff.tv_sec * 1000000.0 + tv_diff.tv_usec) / 1000000,
-           iter, rd_total,
-           (iter * 1000000.0) / (tv_diff.tv_sec * 1000000 + tv_diff.tv_usec));
-
-    printf("%12d connections\n", connc);
-    printf("%12.3lf total run time\n",
+#if XPOLL_EPOLL
+    printf("%12s  mechanism\n", "epoll");
+#elif XPOLL_KQUEUE
+    printf("%12s  mechanism\n", "kqueue");
+#else
+    printf("%12s  mechanism\n", "poll");
+#endif
+    printf("%12d  connections\n", connc);
+    printf("%12.3lf  total run time\n",
            (tv_diff.tv_sec * 1000000.0 + tv_diff.tv_usec) / 1000000);
-    printf("%12ld total iterations\n", iter);
-    printf("%12lu total read operations\n", rd_total);
-    printf("%12.2lf reads/sec\n",
+    printf("%12ld  total iterations\n", iter);
+    printf("%12lu  total read operations\n", rd_total);
+    printf("%12.2lf  reads/sec\n",
            (iter * 1000000.0) / (tv_diff.tv_sec * 1000000 + tv_diff.tv_usec));
 
     xpoll_destroy(xpoll);
