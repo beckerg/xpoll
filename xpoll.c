@@ -44,11 +44,10 @@
  * and POLLOUT, and the operations are XPOLL_ADD, XPOLL_DELETE, XPOLL_ENABLE,
  * and XPOLL_DISABLE.
  *
- * To poll for events one must call xpoll().  xpoll() has the same general
- * sematics as poll(2), but may vary depending upon which underlying
- * implementation is in use.  xpoll() manages the details of the underlying
- * implementation.  In order to retrieve all currently ready events,
- * xpoll_revents(3) should be called until it returns zero.
+ * To poll for events one must call xpoll_wait().  xpoll() has the same general
+ * sematics as poll(2), but may vary somewhat depending upon which underlying
+ * implementation is in use.  In order to retrieve all currently ready events,
+ * xpoll_revents() should be called until it returns zero.
  *
  * Compile this file with the accompanying main.c to generate a simple test
  * program that illustrates how much more efficent epoll(7)/kqueue(2) are
@@ -205,7 +204,7 @@ xpoll_ctl(struct xpoll *xpoll, int op, int events, int fd, void *data)
 
     xpoll->changec = change - xpoll->changev;
 
-    if (xpoll->changec >= NELEM(xpoll->changev) - 1) {
+    if ((size_t)xpoll->changec >= NELEM(xpoll->changev) - 1) {
         rc = kevent(xpoll->fd, xpoll->changev, xpoll->changec, NULL, 0, NULL);
 
         xpoll->changec = 0;
@@ -294,7 +293,7 @@ xpoll_revents(struct xpoll *xpoll, void **datap)
     return events;
 
 #else
-    event = xpoll->eventv;
+    event = xpoll->eventv + xpoll->n;
 
     while (xpoll->n < xpoll->nfds) {
         if (event->revents) {

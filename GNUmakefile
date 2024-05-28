@@ -10,7 +10,7 @@ SRC := xpoll.c main.c
 OBJ := ${SRC:.c=.o}
 
 INCLUDE  := -I.
-CFLAGS   += -Wall -O2 -g3 ${INCLUDE}
+CFLAGS   += -Wall -Wextra -O2 -g3 ${INCLUDE}
 CPPFLAGS += -DNDEBUG
 
 .DELETE_ON_ERROR:

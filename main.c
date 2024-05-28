@@ -53,12 +53,13 @@ struct conn {
     int fd[2];
 };
 
-sig_atomic_t sigalrm;
+volatile sig_atomic_t sigalrm;
 
 void
 sigalrm_isr(int sig)
 {
-    ++sigalrm;
+    if (sig == SIGALRM)
+        sigalrm = 1;
 }
 
 char rwbuf[PIPE_BUF];
@@ -114,14 +115,14 @@ main(int argc, char **argv)
 
     if (rwmax < 1)
         rwmax = 1;
-    else if (rwmax > sizeof(rwbuf))
+    else if ((size_t)rwmax > sizeof(rwbuf))
         rwmax = sizeof(rwbuf);
 
     if (connc == 1) {
 #if XPOLL_KQUEUE
         const char *pollname = "kevent";
 #elif XPOLL_EPOLL
-        const char *pollname = "epool";
+        const char *pollname = "epoll";
 #else
         const char *pollname = "poll";
 #endif
@@ -159,7 +160,7 @@ main(int argc, char **argv)
 
         rc = xpoll_ctl(xpoll, XPOLL_ADD, POLLOUT, conn->fd[1], conn);
         if (rc) {
-            fprintf(stderr, "xpoll_ctl(%p, ADD, POLLIN, %d): %s\n",
+            fprintf(stderr, "xpoll_ctl(%p, ADD, POLLOUT, %d): %s\n",
                     xpoll, conn->fd[0], strerror(errno));
             exit(EX_OSERR);
         }
