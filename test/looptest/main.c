@@ -276,6 +276,7 @@ main(int argc, char **argv)
            (iter * 1000000.0) / (tv_diff.tv_sec * 1000000 + tv_diff.tv_usec));
 
     xpoll_destroy(xpoll);
+    free(connv);
 
     return 0;
 }

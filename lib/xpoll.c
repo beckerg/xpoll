@@ -150,6 +150,8 @@ xpoll_destroy(struct xpoll *xpoll)
 #if XPOLL_EPOLL || XPOLL_KQUEUE
         free(xpoll->eventv);
 #endif
+
+        free(xpoll);
     }
 }
 
