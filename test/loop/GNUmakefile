@@ -1,7 +1,8 @@
 
-# This makefile builds xpoll based on poll(2) by default.
-# Use 'gmake kqueue' to build xpoll with kqueue(2) on FreeBSD,
-# and use 'gmake epoll' to build xpoll with epoll(7) on Linux.
+# This makefile builds looptest based on the preferred mechanism
+# for the given platform (i.e., epoll(7) on Linux, and kqueue(2)
+# on FreeBSD).
+# Use 'gmake poll' to build xpoll with poll(2).
 
 PROG := looptest
 
@@ -43,6 +44,8 @@ poll: CPPFLAGS += -DXPOLL_POLL=1
 poll: ${PROG}
 
 ${PROG}: ${OBJ}
+	$(LINK.o) $^ $(LOADLIBES) $(LDLIBS) -o $@
+
 
 .%.d: %.c
 	@set -e; rm -f $@; \
