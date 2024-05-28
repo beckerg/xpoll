@@ -1,13 +1,8 @@
-SUBDIRS = test
-
-.NOTPARALLEL:
+SUBDIRS = loop
 
 .PHONY: all ${SUBDIRS} ${MAKECMDGOALS}
 
 all ${MAKECMDGOALS}: ${SUBDIRS}
-
-clobber: ${SUBDIRS}
-	rm -f cscope.* TAGS
 
 ${SUBDIRS}:
 	${MAKE} -C $@ ${MAKECMDGOALS}
