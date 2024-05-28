@@ -1,4 +1,4 @@
-SUBDIRS = loop
+SUBDIRS = looptest
 
 .PHONY: all ${SUBDIRS} ${MAKECMDGOALS}
 
